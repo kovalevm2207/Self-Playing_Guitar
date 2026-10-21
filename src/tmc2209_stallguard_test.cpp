@@ -3,27 +3,32 @@
 #include <avr/interrupt.h>
 #include <util/atomic.h>
 #include <stdlib.h>
+#include "stallguard_readiness.h"
 
 // Uno: STEP D2, DIR D3, EN D4, DIAG D5.
 // AltSoftSerial: RX D8 -> PDN_UART; TX D9 -> 1k -> same PDN_UART.
 // MS1=MS2=LOW -> UART address 0. Timer1 belongs to AltSoftSerial;
 // Timer2 generates STEP. Do not combine with other timer-using tests.
 constexpr uint8_t STEP_PIN = 2, DIR_PIN = 3, EN_PIN = 4, DIAG_PIN = 5;
-constexpr uint16_t START_RATE = 1600; // 60 RPM at 1/8, not standstill sensing.
-constexpr uint32_t ARM_DELAY_MS = 150, LINK_TIMEOUT_MS = 2000, MAX_RUN_MS = 5000;
+constexpr uint16_t START_RATE = 400; // Start gently at 15 RPM; measure only at target.
+constexpr uint32_t LINK_TIMEOUT_MS = 2000, MAX_RUN_MS = 5000;
 AltSoftSerial driverSerial;
 volatile bool moving = false, armed = false, diagTrip = false, reachedLimit = false;
 volatile bool autoStop = true;
 volatile uint16_t diagEvents = 0;
 volatile uint16_t pulses = 0, pulseLimit = 5000;
 bool active = false, warming = false;
+bool baselineTrial = false;
 uint16_t rate = START_RATE, targetRate = 3200;
+uint8_t timerClockBits = _BV(CS22) | _BV(CS21);
+uint32_t pulseClockHz = 62500;
 uint8_t threshold = 20;
 uint32_t heartbeat = 0, warmUntil = 0, startedAt = 0, lastRamp = 0;
 uint32_t atSpeedAt = 0, lastSample = 0;
 uint32_t lastDiagnostics = 0, sampleNumber = 0, lastSgAt = 0;
 uint16_t lastSg = 0, sgMin = 65535, sgMax = 0;
 uint8_t consecutiveLow = 0, chipDiag = 0, pwmScale = 0;
+StallGuardReadiness readiness;
 bool diagnosticsFresh = false;
 char buffer[32];
 uint8_t length = 0;
@@ -126,11 +131,17 @@ ISR(TIMER2_COMPA_vect) {
 }
 
 void setRate(uint16_t requested) {
-  // Timer2: 16MHz/64 = 250kHz, period quantization 4us.
-  const uint8_t top = static_cast<uint8_t>((250000UL + requested - 1) / requested - 1);
+  // /256 for a gentle start below 1000 pulses/s, /64 for test speed.
+  const bool slow = requested < 1000;
+  pulseClockHz = slow ? 62500UL : 250000UL;
+  const uint8_t nextClock = slow ? _BV(CS22) | _BV(CS21) : _BV(CS22);
+  const uint8_t top = static_cast<uint8_t>((pulseClockHz + requested - 1) / requested - 1);
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    if (moving && nextClock != timerClockBits) { TCCR2B = 0; TCNT2 = 0; }
     OCR2A = top;
     if (TCNT2 > top) TCNT2 = 0;
+    timerClockBits = nextClock;
+    if (moving) TCCR2B = timerClockBits;
   }
 }
 
@@ -155,6 +166,12 @@ void stopTest(const __FlashStringHelper *reason) {
     Serial.print(F("; cruise_max=")); Serial.println(sgMax);
   }
   Serial.println(F("Position NOT measured; restore reference manually after stall"));
+  uint32_t latchedSg, latchedStatus;
+  if (readRegister(0x41, latchedSg) && readRegister(0x6F, latchedStatus)) {
+    Serial.print(F("STOP_LATCH SG_RESULT=")); Serial.print(latchedSg & 0x3FF);
+    Serial.print(F("; DRV_STATUS=0x")); Serial.print(latchedStatus, HEX);
+    Serial.println(F("; after_disable=1; NOT a fresh moving sample"));
+  }
 }
 
 bool configureDriver() {
@@ -244,6 +261,7 @@ void startTest(uint16_t rpm, uint16_t sensitivity, uint16_t distance, bool forwa
   sgMin = 65535;
   sgMax = lastSg = consecutiveLow = 0;
   diagnosticsFresh = false;
+  readiness.reset();
   digitalWrite(DIR_PIN, forward ? HIGH : LOW);
   digitalWrite(EN_PIN, LOW);
   heartbeat = millis();
@@ -253,6 +271,8 @@ void startTest(uint16_t rpm, uint16_t sensitivity, uint16_t distance, bool forwa
   Serial.print(F("START; rpm=")); Serial.print(rpm);
   Serial.print(F("; SGTHRS=")); Serial.print(threshold);
   Serial.print(F("; travel_limit_mm=")); Serial.println(distance);
+  Serial.println(baselineTrial ? F("TRIAL=BASELINE; keep path free; SG stop disabled; finite travel/time remain")
+                              : F("TRIAL=OBSTACLE; use same setup as baseline; wait for READY_LOAD"));
   Serial.println(autoStop ? F("MODE=AUTO_STOP; DIAG + 2 consecutive low SG readings")
                          : F("MODE=OBSERVE; load/DIAG will NOT stop motor; limited travel and 5s timeout remain"));
   Serial.println(F("WARMUP then ramp; detection INACTIVE until ARMED"));
@@ -289,8 +309,8 @@ void setup() {
   PCICR |= _BV(PCIE2);
   Serial.begin(115200);
   driverSerial.begin(19200);
-  Serial.println(F("SG READY V2; STEP=D2 DIR=D3 EN=D4 DIAG=D5 RX=D8 TX=D9"));
-  Serial.println(F("S...=auto stop; O...=observe; ?=UART; m=load marker; x=stop; h=heartbeat"));
+  Serial.println(F("SG READY V3; STEP=D2 DIR=D3 EN=D4 DIAG=D5 RX=D8 TX=D9"));
+  Serial.println(F("B...=baseline; S...=obstacle; ?=UART; m=load marker; x=stop; h=heartbeat"));
 }
 
 void loop() {
@@ -305,8 +325,8 @@ void loop() {
     if (c == 'h') heartbeat = millis();
     else if (c == 'x') { receiving = false; stopTest(F("STOPPED")); }
     else if (c == '?' && !active) { diagnoseUart(); }
-    else if ((c == 'S' || c == 'O') && !active) {
-      autoStop = c == 'S'; receiving = true; length = 0;
+    else if ((c == 'S' || c == 'B') && !active) {
+      autoStop = c == 'S'; baselineTrial = c == 'B'; receiving = true; length = 0;
     }
     else if (c == 'm' && active) {
       Serial.print(F("LOAD_MARK t_ms=")); Serial.print(millis() - startedAt);
@@ -331,7 +351,7 @@ void loop() {
       TIFR2 = _BV(OCF2A);
       moving = true;
       TIMSK2 = _BV(OCIE2A);
-      TCCR2B = _BV(CS22); // /64
+      TCCR2B = timerClockBits;
     }
   }
   if (now - startedAt >= MAX_RUN_MS) { stopTest(F("TIME_LIMIT")); return; }
@@ -341,7 +361,7 @@ void loop() {
     setRate(rate);
   }
   if (rate == targetRate && !atSpeedAt) atSpeedAt = now;
-  if (!armed && atSpeedAt && now - atSpeedAt >= ARM_DELAY_MS && moving) {
+  if (!armed && atSpeedAt && readiness.ready(now - atSpeedAt) && moving) {
     uint32_t before, after;
     if (!readRegister(0x02, before)) { stopTest(F("UART_LOST")); return; }
     writeRegister(0x14, 0xFFFFF);
@@ -352,6 +372,8 @@ void loop() {
     armed = true;
     Serial.println(autoStop ? F("ARMED: DIAG + software SG detection enabled")
                            : F("ARMED: OBSERVATION ONLY; load does NOT stop motor"));
+    Serial.println(baselineTrial ? F("READY_BASELINE: record steady unloaded motion; keep path free")
+                                : F("READY_LOAD: apply compliant load now; SG stop enabled"));
     if (autoStop && digitalRead(DIAG_PIN)) {
       stopTest(F("DIAG_STOP: high at arming; check threshold/fault/wiring")); return;
     }
@@ -383,13 +405,24 @@ void loop() {
       if (!moving) return;
       if (status & 0x3FUL) { stopTest(F("DRIVER_FAULT: temperature/short warning")); return; }
       if (!(status & (1UL << 30))) { stopTest(F("MODE_ERROR: StealthChop not active")); return; }
+      if (atSpeedAt) {
+        readiness.observe(pwmScale);
+        if (readiness.invalid()) {
+          Serial.print(F("INVALID_PWM value=")); Serial.print(pwmScale);
+          Serial.println(F("; steady current regulation saturated; obstacle assessment invalid"));
+          stopTest(F("INVALID_PWM_STOP: check supply under load, both coils and current setting"));
+          return;
+        }
+      }
     }
     uint16_t count;
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { count = pulses; }
     Serial.print(F("SG_RESULT=")); Serial.print(lastSg);
     Serial.print(F("; trip_below=")); Serial.print(static_cast<uint16_t>(threshold) * 2);
-    Serial.print(F("; rpm_cmd=")); Serial.print(250000.0F / (OCR2A + 1) * 60 / 1600, 1);
+    Serial.print(F("; rpm_cmd=")); Serial.print(static_cast<float>(pulseClockHz) / (OCR2A + 1) * 60 / 1600, 1);
     Serial.print(F("; armed=")); Serial.print(armed);
+    Serial.print(F("; phase="));
+    Serial.print(armed ? (baselineTrial ? F("BASELINE") : F("LOAD")) : F("PRECHECK"));
     Serial.print(F("; pulses=")); Serial.print(count);
     Serial.print(F("; n=")); Serial.print(sampleNumber);
     Serial.print(F("; t_ms=")); Serial.print(lastSgAt - startedAt);

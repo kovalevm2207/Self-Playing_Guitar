@@ -11,9 +11,10 @@ PlatformIO и загружайте его. Автоматическая загр
 | `tmc2209_calibration_test` | Ровно 3200 импульсов по кнопке; определить число импульсов на оборот | Окно скорости с параметром `-Calibration` |
 | `tmc2209_speed_test` | Плавный разгон, расчётные RPM, ручная остановка | [Тест скорости](tmc2209-speed-test-ru.md) |
 | `tmc2209_fret_test` | Три переезда туда-обратно, расстояние 1–300 мм и время из окна | [Переезды между ладами](tmc2209-fret-test-ru.md) |
+| `tmc2209_accuracy_test` | Точность хода и возврата: остановки для измерения, CSV и итоговый допуск | [Тест точности](tmc2209-accuracy-test-ru.md) |
 | `tmc2209_uart_minimal` | Только чтение идентификатора UART через SoftwareSerial, без движения | [Минимальный UART](tmc2209-uart-minimal-ru.md) |
 | `tmc2209_uart_minimal_alt` | Та же проверка через AltSoftSerial | [Минимальный UART](tmc2209-uart-minimal-ru.md) |
-| `tmc2209_stallguard_test` | Нагрузка SG_RESULT, настройка порога, DIAG, режим наблюдения V2 | [StallGuard4](tmc2209-stallguard-test-ru.md) |
+| `tmc2209_stallguard_test` | SG V3: сравнение свободного и нагруженного прохода, DIAG, проверка PWM | [StallGuard4](tmc2209-stallguard-test-ru.md) |
 
 В `src/main.cpp` и `src/max_speed_test.cpp` сохранены прежние варианты
 программы/теста с другой распиновкой: DIR D8, EN D13. Они не предназначены
@@ -48,6 +49,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\start_fret_control.ps1
 powershell -ExecutionPolicy Bypass -File .\tools\start_speed_control.ps1
 powershell -ExecutionPolicy Bypass -File .\tools\start_speed_control.ps1 -Calibration
 powershell -ExecutionPolicy Bypass -File .\tools\start_stallguard_control.ps1
+powershell -ExecutionPolicy Bypass -File .\tools\start_accuracy_control.ps1
 ```
 
 Или запустите соответствующий `tools/tmc2209_*_control.py` обычным Python.
@@ -65,8 +67,9 @@ StallGuard требует дополнительных UART и DIAG провод
 1 кОм к тому же PDN_UART, DIAG D5, 10 кОм D5→GND. Схема и ограничения
 подробно описаны в отдельной инструкции. Измерения SG зависят от тока,
 скорости и питания; успешная остановка при пороге 255 не подтверждает
-обнаружение реального препятствия. V2 поддерживает режим наблюдения,
-который явно отключает остановку по нагрузке, сохраняя остальные пределы.
+обнаружение реального препятствия. V3 сначала записывает свободный проход
+без остановки по SG, затем проверяет нагруженный проход при тех же настройках.
+При насыщении PWM измерение отклоняется; пределы хода и времени остаются.
 
 Нет энкодера или поиска нуля: выдача импульсов не доказывает физическое
 перемещение. Нет обработки концевиков. После срыва/экстренного останова
