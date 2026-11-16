@@ -1,0 +1,30 @@
+.pio/
+.codex_tmp/
+.vscode/
+__pycache__/
+*.py[cod]
+/software/build/
+/software/CMakeUserPresets.json
+/software/compile_commands.json
+/software/.direnv/
+/software/result*
+# Legacy output locations and document previews.
+/build/
+/app/build*/
+/app/dist/
+/output/
+/tmp/
+*.user
+# Local hardware experiments predate the software branch; retained on disk.
+/archive/local-hardware/
+/3DМакет/Крепление_соленоида/
+/3DМакет/Согласование_ножек_v5/
+/3DМакет/Согласование_узла_v6/
+/3DМакет/Шесть_соленоидов*/
+/docs/build-report-assets.cjs
+/docs/proposal-single-string.tex
+/docs/report-delivery-ru.md
+/docs/shopping-telegram.txt
+/docs/single-string-pc-*.jpg
+/docs/single-string-pc-*.svg
+/aqtinstall.log
