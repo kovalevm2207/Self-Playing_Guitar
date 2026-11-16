@@ -26,6 +26,7 @@ class CatalogViewModel : public QObject {
 
 public:
     explicit CatalogViewModel(CatalogService& catalog, QObject* parent = nullptr);
+    ~CatalogViewModel() override;
 
     QVariantList arrangements() const;
     QVariantMap selectedArrangement() const;
@@ -40,6 +41,7 @@ public:
     void setFavoritesOnly(bool enabled);
     Q_INVOKABLE void selectArrangement(const QString& id);
     Q_INVOKABLE void toggleFavorite(const QString& id);
+    Q_INVOKABLE bool reload();
 
 signals:
     void arrangementsChanged();
@@ -50,8 +52,10 @@ signals:
 
 private:
     QVariantMap describe(const CatalogArrangement& entry) const;
+    void catalogChanged(CatalogChange change);
 
     CatalogService& m_catalog;
+    CatalogService::Subscription m_subscription;
     QString m_selectedId;
     QString m_searchText;
     int m_maxStrings = 0;

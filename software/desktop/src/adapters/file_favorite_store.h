@@ -1,20 +1,20 @@
 #pragma once
 
-#include <QSettings>
-#include <memory>
+#include <QString>
 
 #include "application/ports.h"
 
 namespace guitar {
 
-class SettingsFavoriteStore : public FavoriteStore {
+class FileFavoriteStore : public FavoriteStore {
 public:
-    explicit SettingsFavoriteStore(const QString& path = {});
+    explicit FileFavoriteStore(const QString& path = {});
     std::set<std::string> load() override;
     void save(const std::set<std::string>& ids) override;
 
 private:
-    std::unique_ptr<QSettings> m_settings;
+    QString m_path;
+    bool m_readLegacySettings;
 };
 
 } // namespace guitar

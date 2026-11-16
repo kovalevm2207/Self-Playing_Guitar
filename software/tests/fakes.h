@@ -22,8 +22,14 @@ struct MemoryCatalog : CatalogRepository {
 
 struct MemoryFavorites : FavoriteStore {
     std::set<std::string> ids;
+    bool failLoad = false;
     bool failSave = false;
-    std::set<std::string> load() override { return ids; }
+    std::set<std::string> load() override {
+        if (failLoad) {
+            throw std::runtime_error("Cannot read favorites");
+        }
+        return ids;
+    }
     void save(const std::set<std::string>& values) override {
         if (failSave) {
             throw std::runtime_error("Storage failure");

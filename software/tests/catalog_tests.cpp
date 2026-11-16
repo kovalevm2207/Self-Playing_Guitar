@@ -44,7 +44,8 @@ void checkCatalog() {
     test::MemoryCatalog repository;
     test::MemoryFavorites favorites;
     CatalogService catalog(repository, favorites);
-    assert(catalog.error().empty());
+    assert(catalog.catalogError().empty());
+    assert(catalog.favoritesError().empty());
     assert(catalog.data().songs.size() == 1);
     assert(catalog.data().arrangements.size() == 2);
     assert(catalog.song(catalog.arrangement("two")->music.songId)->title ==
@@ -59,10 +60,11 @@ void checkCatalog() {
     assert(!catalog.toggleFavorite("one"));
     assert(
         catalog.isFavorite("one")); // Failed persistence cannot change the UI state.
-    assert(!catalog.error().empty());
+    assert(!catalog.favoritesError().empty());
+    assert(catalog.catalogError().empty());
     favorites.failSave = false;
     assert(catalog.toggleFavorite("one"));
-    assert(catalog.error().empty());
+    assert(catalog.favoritesError().empty());
     assert(!catalog.isFavorite("one"));
 
     repository.data.arrangements[0].music.songId = "unknown";
@@ -72,11 +74,81 @@ void checkCatalog() {
     repository.data.arrangements.push_back(repository.data.arrangements.front());
     assert(!catalog.reload());
     assert(catalog.data().arrangements.size() == 2);
+    const auto error = catalog.catalogError();
+    assert(!error.empty());
+    assert(catalog.toggleFavorite("one"));
+    assert(catalog.catalogError() == error);
+    repository.data = test::sampleCatalog();
+    assert(catalog.reload());
+    assert(catalog.catalogError().empty());
+}
+
+void checkUnavailableFavorites() {
+    test::MemoryCatalog repository;
+    test::MemoryFavorites favorites;
+    favorites.ids = {"two"};
+    favorites.failLoad = true;
+    CatalogService catalog(repository, favorites);
+    assert(catalog.catalogError().empty());
+    assert(!catalog.favoritesError().empty());
+    assert(catalog.data().songs.size() == 1);
+    assert(catalog.data().arrangements.size() == 2);
+
+    // Unread preferences cannot be replaced with an empty fallback snapshot.
+    assert(!catalog.toggleFavorite("one"));
+    assert((favorites.ids == std::set<std::string>{"two"}));
+    favorites.failLoad = false;
+    assert(catalog.toggleFavorite("one"));
+    assert(catalog.isFavorite("one"));
+    assert(catalog.isFavorite("two"));
+    assert(catalog.favoritesError().empty());
+
+    favorites.failLoad = true;
+    repository.data.songs[0].title = "Updated song";
+    assert(catalog.reload());
+    assert(catalog.song("song")->title == "Updated song");
+    assert(catalog.catalogError().empty());
+    assert(!catalog.favoritesError().empty());
+    assert(catalog.isFavorite("one"));
+    assert(catalog.isFavorite("two"));
+}
+
+void checkCatalogNotifications() {
+    test::MemoryCatalog repository;
+    test::MemoryFavorites favorites;
+    CatalogService catalog(repository, favorites);
+    std::vector<CatalogChange> changes;
+    const auto subscription =
+        catalog.subscribe([&](CatalogChange change) { changes.push_back(change); });
+    assert(catalog.reload());
+    assert(catalog.toggleFavorite("one"));
+    favorites.failSave = true;
+    assert(!catalog.toggleFavorite("one"));
+    repository.data.songs.clear();
+    assert(!catalog.reload());
+    assert((changes == std::vector<CatalogChange>{CatalogChange::Data,
+                                                  CatalogChange::Favorites,
+                                                  CatalogChange::Status,
+                                                  CatalogChange::Status}));
+    catalog.unsubscribe(subscription);
+    assert(!catalog.reload());
+    assert(changes.size() == 4);
+
+    CatalogService::Subscription first = 0;
+    first = catalog.subscribe([&](CatalogChange) { catalog.unsubscribe(first); });
+    const auto second =
+        catalog.subscribe([&](CatalogChange change) { changes.push_back(change); });
+    assert(!catalog.reload());
+    assert(!catalog.reload());
+    assert(changes.size() == 6);
+    catalog.unsubscribe(second);
 }
 
 int main() {
     checkMusic();
     checkCatalog();
+    checkUnavailableFavorites();
+    checkCatalogNotifications();
     std::cout << "PASS: music, tempo, long arrangements, references, transactional "
-                 "favorites\n";
+                 "favorites, independent errors, catalog notifications\n";
 }

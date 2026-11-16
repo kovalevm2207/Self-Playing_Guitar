@@ -13,8 +13,9 @@ CatalogService::CatalogService(CatalogRepository& repository,
 }
 
 bool CatalogService::reload() {
+    CatalogData data;
     try {
-        auto data = m_repository.load();
+        data = m_repository.load();
         std::set<std::string> songIds;
         std::set<std::string> arrangementIds;
         for (const auto& song : data.songs) {
@@ -29,16 +30,25 @@ bool CatalogService::reload() {
                 throw std::invalid_argument("Invalid arrangement or song reference");
             }
         }
-
-        auto favorites = m_favoriteStore.load();
-        m_data = std::move(data);
-        m_favorites = std::move(favorites);
-        m_error.clear();
-        return true;
     } catch (const std::exception& error) {
-        m_error = error.what();
+        m_catalogError = error.what();
+        notify(CatalogChange::Status);
         return false;
     }
+
+    try {
+        auto favorites = m_favoriteStore.load();
+        m_favorites = std::move(favorites);
+        m_favoritesLoaded = true;
+        m_favoritesError.clear();
+    } catch (const std::exception& error) {
+        m_favoritesError = error.what();
+    }
+
+    m_data = std::move(data);
+    m_catalogError.clear();
+    notify(CatalogChange::Data);
+    return true;
 }
 
 const Song* CatalogService::song(const std::string& id) const {
@@ -65,18 +75,42 @@ bool CatalogService::toggleFavorite(const std::string& arrangementId) {
         return false;
     }
 
-    auto favorites = m_favorites;
-    if (!favorites.erase(arrangementId)) {
-        favorites.insert(arrangementId);
-    }
     try {
+        // Do not overwrite unread preferences with an empty fallback snapshot.
+        auto favorites = m_favoritesLoaded ? m_favorites : m_favoriteStore.load();
+        if (!favorites.erase(arrangementId)) {
+            favorites.insert(arrangementId);
+        }
         m_favoriteStore.save(favorites);
         m_favorites = std::move(favorites);
-        m_error.clear();
-        return true;
+        m_favoritesLoaded = true;
+        m_favoritesError.clear();
     } catch (const std::exception& error) {
-        m_error = error.what();
+        m_favoritesError = error.what();
+        notify(CatalogChange::Status);
         return false;
+    }
+    notify(CatalogChange::Favorites);
+    return true;
+}
+
+CatalogService::Subscription CatalogService::subscribe(Observer observer) {
+    const auto subscription = ++m_nextSubscription;
+    m_observers.emplace(subscription, std::move(observer));
+    return subscription;
+}
+
+void CatalogService::unsubscribe(Subscription subscription) {
+    m_observers.erase(subscription);
+}
+
+void CatalogService::notify(CatalogChange change) {
+    // Observers may unsubscribe themselves or another observer during delivery.
+    const auto observers = m_observers;
+    for (const auto& [subscription, observer] : observers) {
+        if (m_observers.count(subscription) && observer) {
+            observer(change);
+        }
     }
 }
 

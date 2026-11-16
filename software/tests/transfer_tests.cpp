@@ -126,10 +126,52 @@ void checkCapacityAndUseCase() {
     assert(transport.sent.size() == count);
 }
 
+void checkReentrantConnection() {
+    test::FakeTransport transport;
+    TransferSession session(transport);
+    session.setOnChanged([&] {
+        if (session.state().phase == TransferPhase::Connecting) {
+            session.cancel();
+        }
+    });
+    session.connectPort("TEST");
+    assert(session.state().phase == TransferPhase::Disconnected);
+    assert(session.state().result == TransferResult::Cancelled);
+    assert(!transport.opened);
+    transport.ready();
+    assert(transport.sent.empty());
+
+    session.setOnChanged([&] {
+        if (session.state().phase == TransferPhase::Connecting) {
+            session.disconnect();
+        }
+    });
+    session.connectPort("TEST");
+    assert(session.state().phase == TransferPhase::Disconnected);
+    assert(!transport.opened);
+
+    // Both attempts have the same phase; only the newer one may open its port.
+    bool replaced = false;
+    session.setOnChanged([&] {
+        if (!replaced && session.state().phase == TransferPhase::Connecting) {
+            replaced = true;
+            session.connectPort("SECOND");
+        }
+    });
+    session.connectPort("FIRST");
+    assert(transport.opened);
+    assert(transport.openedPort == "SECOND");
+    transport.ready();
+    assert(transport.sent.back() == "HELLO 1\n");
+    transport.receive("READY 1 96 DRYRUN\n");
+    assert(session.state().phase == TransferPhase::Ready);
+}
+
 int main() {
     checkUpload();
     checkFailures();
     checkCapacityAndUseCase();
+    checkReentrantConnection();
     std::cout << "PASS: fragmented handshake, upload transcript, errors, timeout, "
-                 "cancellation, capacity\n";
+                 "cancellation, capacity, reentrant connection\n";
 }

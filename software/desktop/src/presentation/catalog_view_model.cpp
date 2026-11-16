@@ -8,6 +8,34 @@ CatalogViewModel::CatalogViewModel(CatalogService& catalog, QObject* parent)
         m_selectedId =
             QString::fromStdString(catalog.data().arrangements.front().music.id);
     }
+    m_subscription = m_catalog.subscribe(
+        [this](CatalogChange change) { catalogChanged(change); });
+}
+
+CatalogViewModel::~CatalogViewModel() {
+    m_catalog.unsubscribe(m_subscription);
+}
+
+void CatalogViewModel::catalogChanged(CatalogChange change) {
+    if (change == CatalogChange::Data) {
+        const auto previousId = m_selectedId;
+        if (!m_catalog.arrangement(m_selectedId.toStdString())) {
+            m_selectedId = m_catalog.data().arrangements.empty()
+                               ? QString{}
+                               : QString::fromStdString(
+                                     m_catalog.data().arrangements.front().music.id);
+        }
+        emit selectedArrangementChanged();
+        if (previousId != m_selectedId) {
+            emit selectionChanged();
+        }
+    } else if (change == CatalogChange::Favorites) {
+        emit selectedArrangementChanged();
+    }
+    if (change != CatalogChange::Status) {
+        emit arrangementsChanged();
+    }
+    emit errorChanged();
 }
 
 QVariantMap CatalogViewModel::describe(const CatalogArrangement& entry) const {
@@ -60,10 +88,15 @@ QVariantMap CatalogViewModel::selectedArrangement() const {
 }
 
 QString CatalogViewModel::error() const {
-    if (m_catalog.error().empty()) {
-        return {};
+    if (!m_catalog.catalogError().empty()) {
+        return "Ошибка каталога: " +
+               QString::fromStdString(m_catalog.catalogError());
     }
-    return "Ошибка каталога: " + QString::fromStdString(m_catalog.error());
+    if (!m_catalog.favoritesError().empty()) {
+        return "Ошибка избранного: " +
+               QString::fromStdString(m_catalog.favoritesError());
+    }
+    return {};
 }
 
 void CatalogViewModel::selectArrangement(const QString& id) {
@@ -76,13 +109,11 @@ void CatalogViewModel::selectArrangement(const QString& id) {
 }
 
 void CatalogViewModel::toggleFavorite(const QString& id) {
-    if (m_catalog.toggleFavorite(id.toStdString())) {
-        emit arrangementsChanged();
-        if (id == m_selectedId) {
-            emit selectedArrangementChanged();
-        }
-    }
-    emit errorChanged();
+    m_catalog.toggleFavorite(id.toStdString());
+}
+
+bool CatalogViewModel::reload() {
+    return m_catalog.reload();
 }
 
 void CatalogViewModel::setSearchText(const QString& text) {

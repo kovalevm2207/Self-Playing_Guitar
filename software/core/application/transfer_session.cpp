@@ -56,6 +56,7 @@ void TransferSession::changed() {
 }
 
 void TransferSession::reset() {
+    ++m_generation;
     m_transport.stopTimeout();
     m_transport.close();
     m_state = {};
@@ -73,8 +74,12 @@ void TransferSession::connectPort(const std::string& port) {
         return;
     }
     m_state.phase = TransferPhase::Connecting;
+    const auto generation = m_generation;
     changed();
-    m_transport.open(port);
+    // A synchronous observer can cancel or replace this connection attempt.
+    if (generation == m_generation && m_state.phase == TransferPhase::Connecting) {
+        m_transport.open(port);
+    }
 }
 
 void TransferSession::disconnect() {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -61,6 +62,7 @@ private:
     std::string m_expected;
     size_t m_nextNote = 0;
     size_t m_capacity = 0;
+    uint64_t m_generation = 0;
 };
 
 } // namespace guitar

@@ -21,7 +21,7 @@ ApplicationWindow {
     Connections {
         target: catalog
         function onSelectionChanged() {
-            tempo.value = catalog.selectedArrangement.bpm;
+            tempo.value = catalog.selectedArrangementId.length ? catalog.selectedArrangement.bpm : 100;
         }
     }
     function duration(ms) {

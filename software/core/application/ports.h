@@ -35,6 +35,7 @@ class FavoriteStore {
 public:
     virtual ~FavoriteStore() = default;
     virtual std::set<std::string> load() = 0;
+    // Commit the complete snapshot, or throw without a deferred write.
     virtual void save(const std::set<std::string>& ids) = 0;
 };
 

@@ -2,7 +2,7 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 add_library(guitar_desktop STATIC
     src/adapters/json_catalog_repository.cpp
-    src/adapters/settings_favorite_store.cpp
+    src/adapters/file_favorite_store.cpp
     src/adapters/qt_serial_transport.cpp
     src/adapters/qt_serial_transport.h
     src/presentation/catalog_view_model.cpp
