@@ -15,17 +15,18 @@ ApplicationWindow {
     property color ink: "#f2f0eb"
     property color muted: "#8e9498"
     property color accent: "#c4ed91"
-    property int selected: 0
     property int page: 0
-    property int stringFilter: 0
-    property string query: ""
-    property var current: guitar.songs.length ? guitar.songs[selected] : null
+    property var current: catalog.selectedArrangementId.length ? catalog.selectedArrangement : null
+    onPageChanged: catalog.favoritesOnly = page === 1
+    Connections {
+        target: catalog
+        function onSelectionChanged() {
+            tempo.value = catalog.selectedArrangement.bpm;
+        }
+    }
     function duration(ms) {
         var s = Math.round(ms / 1000);
         return Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + s % 60;
-    }
-    function shown(s) {
-        return (page !== 1 || s.favorite) && (stringFilter === 0 || s.stringCount <= stringFilter) && (s.title + " " + s.author).toLowerCase().indexOf(query.toLowerCase()) >= 0;
     }
 
     component Txt: Label {
@@ -139,8 +140,8 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                         }
                         Txt {
-                            text: guitar.connected ? "●  Подключена по USB" : "○  Не подключена"
-                            color: guitar.connected ? root.accent : root.muted
+                            text: transfer.connected ? "●  Подключена по USB" : "○  Не подключена"
+                            color: transfer.connected ? root.accent : root.muted
                             font.pixelSize: 11
                         }
                         Action {
@@ -148,7 +149,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             implicitHeight: 32
                             onClicked: {
-                                guitar.refreshPorts();
+                                transfer.refreshPorts();
                                 connection.open();
                             }
                         }
@@ -179,8 +180,8 @@ ApplicationWindow {
                     Layout.fillWidth: true
                 }
                 Txt {
-                    text: "●  " + (guitar.connected ? "UNO ONLINE" : "USB OFFLINE")
-                    color: guitar.connected ? root.accent : root.muted
+                    text: "●  " + (transfer.connected ? "UNO ONLINE" : "USB OFFLINE")
+                    color: transfer.connected ? root.accent : root.muted
                     font.pixelSize: 10
                     font.letterSpacing: 1
                 }
@@ -241,6 +242,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 12
                 TextField {
+                    objectName: "catalogSearch"
                     Layout.fillWidth: true
                     implicitHeight: 44
                     color: root.ink
@@ -253,14 +255,15 @@ ApplicationWindow {
                         radius: 10
                         border.color: parent.activeFocus ? root.accent : "#303639"
                     }
-                    onTextChanged: root.query = text
+                    onTextChanged: catalog.searchText = text
                 }
                 ComboBox {
                     id: filters
+                    objectName: "stringFilter"
                     model: ["Все аранжировки", "До 1 струны", "До 2 струн", "До 3 струн", "До 4 струн", "До 5 струн", "До 6 струн"]
                     implicitWidth: 180
                     implicitHeight: 44
-                    onCurrentIndexChanged: root.stringFilter = currentIndex
+                    onCurrentIndexChanged: catalog.maxStrings = currentIndex
                     palette.button: "#252a2d"
                     palette.buttonText: root.ink
                     palette.base: "#252a2d"
@@ -286,7 +289,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                         }
                         Txt {
-                            text: guitar.songs.filter(s => root.shown(s)).length + " в списке"
+                            text: catalog.arrangements.length + " в списке"
                             color: root.muted
                             font.pixelSize: 11
                         }
@@ -297,7 +300,7 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         spacing: 10
                         clip: true
-                        model: guitar.songs.filter(s => root.shown(s))
+                        model: catalog.arrangements
                         ScrollBar.vertical: ScrollBar {}
                         delegate: Rectangle {
                             id: card
@@ -305,12 +308,12 @@ ApplicationWindow {
                             width: songList.width
                             height: 104
                             radius: 13
-                            color: root.selected === modelData.index ? "#252e27" : "#1c2023"
-                            border.color: root.selected === modelData.index ? "#79975b" : "#2b3134"
+                            color: catalog.selectedArrangementId === modelData.id ? "#252e27" : "#1c2023"
+                            border.color: catalog.selectedArrangementId === modelData.id ? "#79975b" : "#2b3134"
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.selected = card.modelData.index
+                                onClicked: catalog.selectArrangement(card.modelData.id)
                             }
                             RowLayout {
                                 anchors.fill: parent
@@ -362,7 +365,7 @@ ApplicationWindow {
                                         font.pixelSize: 23
                                         horizontalAlignment: Text.AlignHCenter
                                     }
-                                    onClicked: guitar.favorite(card.modelData.index)
+                                    onClicked: catalog.toggleFavorite(card.modelData.id)
                                 }
                             }
                         }
@@ -481,15 +484,17 @@ ApplicationWindow {
                                 }
                                 Slider {
                                     id: tempo
+                                    objectName: "playbackTempo"
                                     Layout.fillWidth: true
                                     from: 40
                                     to: 220
                                     stepSize: 1
-                                    value: root.current ? root.current.bpm : 100
-                                    enabled: !guitar.busy
+                                    value: 100
+                                    Component.onCompleted: value = root.current ? root.current.bpm : 100
+                                    enabled: !transfer.busy
                                 }
                                 Txt {
-                                    text: root.current ? root.current.notes.length + " нот · " + root.duration(root.current.durationMs * root.current.bpm / tempo.value) + " при этом темпе" : ""
+                                    text: root.current ? root.current.noteCount + " нот · " + root.duration(root.current.durationMs * root.current.bpm / tempo.value) + " при этом темпе" : ""
                                     color: root.muted
                                     font.pixelSize: 11
                                 }
@@ -505,29 +510,29 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                         }
                         Txt {
-                            text: guitar.status
-                            color: guitar.connected ? root.accent : root.muted
+                            text: catalog.error.length ? catalog.error : transfer.status
+                            color: transfer.connected ? root.accent : root.muted
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                             font.pixelSize: 11
                         }
                         ProgressBar {
                             Layout.fillWidth: true
-                            value: guitar.progress
-                            visible: guitar.busy || guitar.progress > 0
+                            value: transfer.progress
+                            visible: transfer.busy || transfer.progress > 0
                         }
                         Action {
-                            text: guitar.busy ? "Передаём…" : "↓  Загрузить на Uno"
+                            text: transfer.busy ? "Передаём…" : "↓  Загрузить на Uno"
                             primary: true
                             Layout.fillWidth: true
-                            enabled: guitar.connected && !guitar.busy && root.current !== null
-                            onClicked: guitar.upload(root.selected, Math.round(tempo.value))
+                            enabled: transfer.connected && !transfer.busy && root.current !== null
+                            onClicked: transfer.upload(catalog.selectedArrangementId, Math.round(tempo.value))
                         }
                         Action {
                             text: "Отменить"
-                            visible: guitar.busy
+                            visible: transfer.busy
                             Layout.fillWidth: true
-                            onClicked: guitar.cancel()
+                            onClicked: transfer.cancel()
                         }
                         Txt {
                             text: "Версия 0.1 передаёт ноты в память платы. Управление механикой и воспроизведение будут следующим этапом."
@@ -573,17 +578,17 @@ ApplicationWindow {
             RowLayout {
                 ComboBox {
                     id: portChoice
-                    model: guitar.ports
+                    model: transfer.ports
                     Layout.fillWidth: true
                     implicitHeight: 42
                 }
                 Action {
                     text: "Обновить"
-                    onClicked: guitar.refreshPorts()
+                    onClicked: transfer.refreshPorts()
                 }
             }
             Txt {
-                text: guitar.status
+                text: catalog.error.length ? catalog.error : transfer.status
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
                 color: root.accent
@@ -598,14 +603,14 @@ ApplicationWindow {
                     Layout.fillWidth: true
                 }
                 Action {
-                    text: guitar.connected ? "Отключить" : "Подключить"
+                    text: transfer.connected ? "Отключить" : "Подключить"
                     primary: true
-                    enabled: !guitar.busy && (guitar.connected || portChoice.count > 0)
+                    enabled: !transfer.busy && (transfer.connected || portChoice.count > 0)
                     onClicked: {
-                        if (guitar.connected)
-                            guitar.disconnectPort();
+                        if (transfer.connected)
+                            transfer.disconnectPort();
                         else
-                            guitar.connectPort(portChoice.currentText);
+                            transfer.connectPort(portChoice.currentText);
                     }
                 }
             }

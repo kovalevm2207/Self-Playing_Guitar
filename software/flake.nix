@@ -66,13 +66,13 @@
           cmake -S ${self} -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=${llvm.stdenv.cc}/bin/clang++
           cmake --build build
-          ctest --test-dir build --output-on-failure --no-tests=error
           export HOME="$TMPDIR/home"
           export XDG_CACHE_HOME="$HOME/.cache"
           mkdir -p "$XDG_CACHE_HOME"
           export FONTCONFIG_FILE=${pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; }}
           export QT_PLUGIN_PATH="${qt.qtbase}/lib/qt-6/plugins"
           export QML_IMPORT_PATH="${qt.qtdeclarative}/lib/qt-6/qml"
+          ctest --test-dir build --output-on-failure --no-tests=error
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
             build/bin/SelfGuitar --screenshot "$TMPDIR/preview.png"
           touch "$out"

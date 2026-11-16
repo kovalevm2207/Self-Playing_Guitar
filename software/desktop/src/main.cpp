@@ -5,7 +5,11 @@
 #include <QQuickWindow>
 #include <QTimer>
 
-#include "backend.h"
+#include "adapters/json_catalog_repository.h"
+#include "adapters/qt_serial_transport.h"
+#include "adapters/settings_favorite_store.h"
+#include "presentation/catalog_view_model.h"
+#include "presentation/transfer_view_model.h"
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -13,9 +17,18 @@ int main(int argc, char* argv[]) {
     app.setApplicationName("SelfGuitar");
     QQuickStyle::setStyle("Basic");
 
-    Backend backend;
+    guitar::JsonCatalogRepository repository(":/data/songs.json");
+    guitar::SettingsFavoriteStore favorites;
+    guitar::CatalogService catalog(repository, favorites);
+    guitar::QtSerialTransport transport;
+    guitar::TransferSession session(transport);
+    guitar::UploadArrangement upload(catalog, session);
+    guitar::CatalogViewModel catalogViewModel(catalog);
+    guitar::TransferViewModel transferViewModel(session, transport, upload);
+
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty("guitar", &backend);
+    engine.rootContext()->setContextProperty("catalog", &catalogViewModel);
+    engine.rootContext()->setContextProperty("transfer", &transferViewModel);
     engine.loadFromModule("Guitar", "Main");
     if (engine.rootObjects().isEmpty()) {
         return 1;

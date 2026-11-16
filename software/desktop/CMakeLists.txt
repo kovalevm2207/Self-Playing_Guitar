@@ -1,9 +1,21 @@
 qt_standard_project_setup(REQUIRES 6.8)
 
+add_library(guitar_desktop STATIC
+    src/adapters/json_catalog_repository.cpp
+    src/adapters/settings_favorite_store.cpp
+    src/adapters/qt_serial_transport.cpp
+    src/adapters/qt_serial_transport.h
+    src/presentation/catalog_view_model.cpp
+    src/presentation/catalog_view_model.h
+    src/presentation/transfer_view_model.cpp
+    src/presentation/transfer_view_model.h
+)
+target_include_directories(guitar_desktop PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(guitar_desktop PUBLIC guitar_core Qt6::Core Qt6::SerialPort)
+guitar_configure_target(guitar_desktop)
+
 qt_add_executable(SelfGuitar
     src/main.cpp
-    src/backend.cpp
-    src/backend.h
 )
 
 qt_add_qml_module(SelfGuitar
@@ -18,10 +30,9 @@ qt_add_resources(SelfGuitar catalog
 )
 
 target_link_libraries(SelfGuitar PRIVATE
-    guitar_protocol
+    guitar_desktop
     Qt6::Quick
     Qt6::QuickControls2
-    Qt6::SerialPort
 )
 guitar_configure_target(SelfGuitar)
 

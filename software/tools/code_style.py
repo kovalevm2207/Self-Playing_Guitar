@@ -10,14 +10,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def source_files():
     directories = [
+        ROOT / "core",
         ROOT / "desktop/src",
         ROOT / "shared",
         ROOT / "tests",
-        ROOT / "tests/stubs",
         ROOT / "firmware/song_receiver/src",
     ]
     for directory in directories:
-        for path in sorted(directory.iterdir()):
+        for path in sorted(directory.rglob("*")):
             if path.suffix in {".cpp", ".h"}:
                 yield path, "clang-format-18"
 
