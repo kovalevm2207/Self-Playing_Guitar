@@ -1,0 +1,10 @@
+add_executable(score_tests score_tests.cpp)
+target_link_libraries(score_tests PRIVATE guitar_protocol)
+guitar_configure_target(score_tests)
+add_test(NAME score_protocol COMMAND score_tests)
+
+add_executable(receiver_tests receiver_tests.cpp)
+target_link_libraries(receiver_tests PRIVATE guitar_protocol)
+target_include_directories(receiver_tests PRIVATE stubs)
+guitar_configure_target(receiver_tests)
+add_test(NAME firmware_parser COMMAND receiver_tests)
