@@ -73,7 +73,7 @@ void checkDrivers() {
 }
 
 void checkPlanner() {
-    auto config = simulationConfig();
+    auto config = simulationConfig(0x3f);
     MotionPlanner planner(config);
     int16_t positions[6]{};
     const Note impossible[]{{1, 0, 50}, {1, 24, 50}};
@@ -91,7 +91,7 @@ void checkPlanner() {
 }
 
 void checkSequence(uint32_t start) {
-    const auto config = simulationConfig();
+    const auto config = simulationConfig(0x3f);
     MotionPlanner planner(config);
     ProbeOutput output;
     ActuatorBank actuators(output, config.stepper);

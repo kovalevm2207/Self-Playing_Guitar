@@ -57,6 +57,8 @@ QString TransferViewModel::status() const {
             return "В аранжировке больше нот, чем вмещает текущая прошивка Uno";
         case TransferError::InvalidScore:
             return "Не удалось подготовить ноты. Проверьте аранжировку и темп.";
+        case TransferError::UnsupportedStrings:
+            return "Стенд не поддерживает струны выбранной аранжировки";
         case TransferError::Playback:
             if (state.details == "PLAN") {
                 return "Переходы между нотами не укладываются в заданный темп";

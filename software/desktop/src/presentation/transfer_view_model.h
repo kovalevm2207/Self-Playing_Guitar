@@ -15,6 +15,7 @@ class TransferViewModel : public QObject {
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY stateChanged)
     Q_PROPERTY(bool canPlay READ canPlay NOTIFY stateChanged)
+    Q_PROPERTY(int supportedStringMask READ supportedStringMask NOTIFY stateChanged)
     Q_PROPERTY(double progress READ progress NOTIFY stateChanged)
     Q_PROPERTY(QString loadedTitle READ loadedTitle NOTIFY stateChanged)
 
@@ -29,6 +30,7 @@ public:
     bool busy() const;
     bool playing() const;
     bool canPlay() const;
+    int supportedStringMask() const { return m_session.state().supportedStringMask; }
     double progress() const { return m_session.state().progress; }
     QString loadedTitle() const;
 

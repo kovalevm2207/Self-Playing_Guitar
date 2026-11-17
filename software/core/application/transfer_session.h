@@ -27,6 +27,7 @@ enum class TransferError {
     DeviceRejected,
     Capacity,
     InvalidScore,
+    UnsupportedStrings,
     Playback
 };
 
@@ -39,6 +40,7 @@ struct TransferState {
     double progress = 0;
     bool supportsPlayback = false;
     bool simulated = false;
+    uint8_t supportedStringMask = 0x3f;
 };
 
 class TransferSession {

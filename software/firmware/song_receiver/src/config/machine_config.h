@@ -18,7 +18,8 @@ struct MachineConfig {
 
 // Deliberately artificial geometry and timing, exclusively for simulation.
 // A hardware profile needs measured coordinates, homing and a timer backend.
-MachineConfig simulationConfig();
+// The current bench supports string 1 (high E). Other masks are for simulations.
+MachineConfig simulationConfig(uint8_t stringMask = 0x01);
 
 } // namespace firmware
 } // namespace guitar

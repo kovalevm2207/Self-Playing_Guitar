@@ -17,6 +17,9 @@ ApplicationWindow {
     property color accent: "#c4ed91"
     property int page: 0
     property var current: catalog.selectedArrangementId.length ? catalog.selectedArrangement : null
+    property bool currentSupported: current !== null && current.strings.every(function (number) {
+        return (transfer.supportedStringMask & (1 << (number - 1))) !== 0;
+    })
     onPageChanged: catalog.favoritesOnly = page === 1
     Connections {
         target: catalog
@@ -521,15 +524,24 @@ ApplicationWindow {
                             value: transfer.progress
                             visible: transfer.busy || transfer.progress > 0
                         }
+                        Txt {
+                            text: root.currentSupported ? "Стенд: струна 1 · самая тонкая E4" : "Эта аранжировка требует другие струны. Выберите версию для струны 1 (E4)."
+                            visible: transfer.connected && transfer.supportedStringMask === 1
+                            color: root.currentSupported ? root.muted : "#edc78f"
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: 11
+                            Layout.fillWidth: true
+                        }
                         RowLayout {
                             Layout.fillWidth: true
                             visible: !transfer.playing
                             spacing: 8
                             Action {
+                                objectName: "uploadScore"
                                 text: transfer.busy ? "Передаём…" : "↓ Загрузить"
                                 primary: !transfer.canPlay
                                 Layout.fillWidth: true
-                                enabled: transfer.connected && !transfer.busy && root.current !== null
+                                enabled: transfer.connected && !transfer.busy && root.currentSupported
                                 onClicked: transfer.upload(catalog.selectedArrangementId, Math.round(tempo.value))
                             }
                             Action {

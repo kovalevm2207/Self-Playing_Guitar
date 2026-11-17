@@ -3,7 +3,7 @@
 namespace guitar {
 namespace firmware {
 
-MachineConfig simulationConfig() {
+MachineConfig simulationConfig(uint8_t stringMask) {
     MachineConfig config{};
     for (uint8_t fret = 0; fret <= 24; ++fret) {
         config.fretSteps[fret] = fret * 2;
@@ -14,7 +14,7 @@ MachineConfig simulationConfig() {
     config.clampUs = 1000;
     config.pickUs = 2000;
     config.maxLatenessUs = 5000;
-    config.stringMask = 0x3f;
+    config.stringMask = stringMask;
     return config;
 }
 

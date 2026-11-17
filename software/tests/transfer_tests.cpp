@@ -168,11 +168,40 @@ void checkReentrantConnection() {
     assert(session.state().phase == TransferPhase::Ready);
 }
 
+void checkStringCapabilities() {
+    test::FakeTransport transport;
+    TransferSession session(transport);
+    session.connectPort("TEST");
+    transport.ready();
+    transport.receive("READY 1 96 SIMULATED 1\n");
+    assert(session.state().phase == TransferPhase::Ready);
+    assert(session.state().supportedStringMask == 1);
+    const auto sent = transport.sent.size();
+    session.upload({"Second string", {{2, 0, 500}}});
+    assert(session.state().error == TransferError::UnsupportedStrings);
+    assert(transport.sent.size() == sent);
+    session.upload(sampleScore());
+    assert(session.state().phase == TransferPhase::Uploading);
+
+    for (const std::string mask : {"0", "64", "-1", "junk", "1junk", "1 2"}) {
+        session.connectPort("TEST");
+        transport.ready();
+        transport.receive("READY 1 96 SIMULATED " + mask + "\n");
+        assert(session.state().error == TransferError::Protocol);
+        assert(!transport.opened);
+    }
+    session.connectPort("TEST");
+    transport.ready();
+    transport.receive("READY 1 96 SIMULATED\n");
+    assert(session.state().supportedStringMask == 0x3f);
+}
+
 int main() {
     checkUpload();
     checkFailures();
     checkCapacityAndUseCase();
     checkReentrantConnection();
+    checkStringCapabilities();
     std::cout << "PASS: fragmented handshake, upload transcript, errors, timeout, "
                  "cancellation, capacity, reentrant connection\n";
 }

@@ -19,6 +19,7 @@
 #include "adapters/json_catalog_repository.h"
 #include "adapters/qt_serial_transport.h"
 #include "fakes.h"
+#include "motion/motion_planner.h"
 #include "presentation/catalog_view_model.h"
 #include "presentation/transfer_view_model.h"
 
@@ -159,14 +160,14 @@ void checkPresentation() {
     assert(catalog.catalogError().empty());
     assert(catalog.favoritesError().empty());
     assert(catalog.data().songs.size() == 6);
-    assert(catalog.data().arrangements.size() == 6);
+    assert(catalog.data().arrangements.size() == 7);
 
     test::FakeTransport transport;
     TransferSession session(transport);
     UploadArrangement upload(catalog, session);
     CatalogViewModel catalogView(catalog);
     TransferViewModel transferView(session, transport, upload);
-    assert(catalogView.selectedArrangementId() == "ode-one");
+    assert(catalogView.selectedArrangementId() == "ode-high-e");
     assert(catalogView.selectedArrangement()["stringCount"].toInt() == 1);
     assert(catalogView.selectedArrangement()["noteCount"].toInt() == 15);
 
@@ -192,14 +193,14 @@ void checkPresentation() {
 
     search->setProperty("text", "БЕТХОВЕН");
     QCoreApplication::processEvents();
-    assert(catalogView.arrangements().size() == 1);
+    assert(catalogView.arrangements().size() == 2);
     search->setProperty("text", "ничего такого нет");
     QCoreApplication::processEvents();
     assert(catalogView.arrangements().empty());
     search->setProperty("text", "");
     filter->setProperty("currentIndex", 2);
     QCoreApplication::processEvents();
-    assert(catalogView.arrangements().size() == 2);
+    assert(catalogView.arrangements().size() == 3);
 
     catalogView.selectArrangement("twinkle");
     assert(tempo->property("value").toInt() == 90);
@@ -224,13 +225,24 @@ void checkPresentation() {
     transferView.connectPort("TEST");
     assert(transferView.busy());
     transport.ready();
-    transport.receive("READY 1 96 SIMULATED\n");
+    transport.receive("READY 1 96 SIMULATED 1\n");
     assert(transferView.connected() && !transferView.busy());
-    assert(QMetaObject::invokeMethod(
-        &transferView, "upload", Q_ARG(QString, "twinkle"), Q_ARG(int, 90)));
+    auto* uploadButton = window->findChild<QObject*>("uploadScore");
+    assert(uploadButton);
+    QCoreApplication::processEvents();
+    assert(!uploadButton->property("enabled").toBool());
+    catalogView.selectArrangement("ode-one"); // One string, but it is string 2.
+    QCoreApplication::processEvents();
+    assert(!uploadButton->property("enabled").toBool());
+    window->setProperty("page", 0);
+    catalogView.selectArrangement("ode-high-e");
+    QCoreApplication::processEvents();
+    assert(tempo->property("value").toInt() == 80);
+    assert(uploadButton->property("enabled").toBool());
+    assert(QMetaObject::invokeMethod(uploadButton, "clicked"));
     assert(transferView.busy());
     transport.receive("OK BEGIN\n");
-    const auto count = catalog.arrangement("twinkle")->music.notes.size();
+    const auto count = catalog.arrangement("ode-high-e")->music.notes.size();
     for (size_t index = 0; index < count; ++index) {
         transport.receive("OK " + std::to_string(index) + "\n");
     }
@@ -349,6 +361,27 @@ void checkCatalogReload() {
     assert(warnings.empty());
 }
 
+void checkBenchArrangement() {
+    JsonCatalogRepository repository(GUITAR_CATALOG_FILE);
+    test::MemoryFavorites favorites;
+    CatalogService catalog(repository, favorites);
+    const auto* entry = catalog.arrangement("ode-high-e");
+    assert(entry);
+    assert((usedStrings(entry->music) == std::vector<int>{1}));
+    assert(entry->music.tempo == 80);
+    assert(durationMs(entry->music) == 12000);
+    for (const auto& note : entry->music.notes) {
+        assert(note.fret <= 7);
+    }
+    const auto config = firmware::simulationConfig();
+    firmware::MotionPlanner planner(config);
+    const int16_t positions[6]{};
+    for (const int tempo : {40, 80, 220}) {
+        const auto score = prepareScore(entry->music, "Ode", tempo);
+        assert(planner.validate(score.notes.data(), score.notes.size(), positions));
+    }
+}
+
 void checkCatalogSubscriptions() {
     test::MemoryCatalog repository;
     test::MemoryFavorites favorites;
@@ -378,6 +411,7 @@ int main(int argc, char* argv[]) {
     checkPresentation();
     checkCatalogReload();
     checkCatalogSubscriptions();
+    checkBenchArrangement();
     checkLegacyFavorites();
     std::cout << "PASS: JSON validation, persisted favorites, QML filters, "
                  "storage recovery, selection, catalog reload, upload bindings\n";

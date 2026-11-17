@@ -68,7 +68,13 @@ void CommandReceiver::command(uint32_t now) {
     if (!strcmp(tokens[0], "HELLO") && count == 2 && !strcmp(tokens[1], "1")) {
         m_player.stop();
         m_score.abort();
-        m_output.line("READY 1 96 SIMULATED");
+        char response[40];
+        snprintf(response,
+                 sizeof(response),
+                 "READY 1 %u SIMULATED %u",
+                 unsigned(MaxNotes),
+                 unsigned(m_player.supportedStringMask()));
+        m_output.line(response);
         return;
     }
     if (!strcmp(tokens[0], "STOP") && count == 1) {
@@ -119,8 +125,11 @@ void CommandReceiver::command(uint32_t now) {
         if (!number(tokens[1], index) || !number(tokens[2], string) ||
             !number(tokens[3], fret) || !number(tokens[4], duration)) {
             error("COMMAND");
-        } else if (string > 6 || fret > 24 ||
-                   !m_score.append(index,
+        } else if (!string || string > 6 || fret > 24) {
+            error("NOTE");
+        } else if (!(m_player.supportedStringMask() & (1 << (string - 1)))) {
+            error("STRING");
+        } else if (!m_score.append(index,
                                    {uint8_t(string), uint8_t(fret), duration})) {
             error("NOTE");
         } else {

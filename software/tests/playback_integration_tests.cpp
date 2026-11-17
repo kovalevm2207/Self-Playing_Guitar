@@ -65,10 +65,17 @@ int main() {
     device.pump();
     assert(session.state().phase == TransferPhase::Ready);
     assert(session.state().supportsPlayback && session.state().simulated);
-    session.upload({"Test song", {{1, 3, 100}, {1, 0, 120}, {2, 1, 80}}});
+    assert(session.state().supportedStringMask == 1);
+    session.upload({"Test song", {{1, 3, 100}, {1, 0, 120}, {1, 1, 80}}});
     device.pump();
     assert(session.state().result == TransferResult::Loaded);
     assert(device.score.loaded && device.score.count == 3);
+    session.upload({"Wrong string", {{2, 0, 100}}});
+    assert(session.state().error == TransferError::UnsupportedStrings);
+    assert(session.state().phase == TransferPhase::Ready);
+    assert(device.responses.empty()); // Rejection occurs before BEGIN is sent.
+    assert(device.score.loaded && device.score.count == 3);
+    assert(session.state().loadedTitle == "Test song");
     session.play();
     device.pump();
     assert(session.state().phase == TransferPhase::Playing);

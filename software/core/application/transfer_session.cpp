@@ -195,8 +195,19 @@ void TransferSession::handle(const std::string& line) {
         std::string extra;
         int capacity = 0;
         if (!(response >> marker >> version >> capacity >> mode) ||
-            response >> extra || marker != "READY" || version != "1" ||
+            marker != "READY" || version != "1" ||
             (mode != "DRYRUN" && mode != "SIMULATED") || capacity < 1) {
+            fail(TransferError::Protocol);
+            return;
+        }
+        int supportedStrings = 0x3f;
+        response >> std::ws;
+        if (!response.eof() && (!(response >> supportedStrings) ||
+                                supportedStrings < 1 || supportedStrings > 0x3f)) {
+            fail(TransferError::Protocol);
+            return;
+        }
+        if (response >> extra) {
             fail(TransferError::Protocol);
             return;
         }
@@ -205,6 +216,7 @@ void TransferSession::handle(const std::string& line) {
         m_capacity = std::min<size_t>(capacity, MaxNotes);
         m_state.supportsPlayback = mode == "SIMULATED";
         m_state.simulated = mode == "SIMULATED";
+        m_state.supportedStringMask = static_cast<uint8_t>(supportedStrings);
         m_state.phase = TransferPhase::Ready;
         changed();
         return;
@@ -267,6 +279,13 @@ void TransferSession::upload(PreparedScore score) {
             return valid(note);
         })) {
         reportInvalidScore("Invalid notes");
+        return;
+    }
+    if (stringMask(score.notes.data(), score.notes.size()) &
+        ~m_state.supportedStringMask) {
+        m_state.error = TransferError::UnsupportedStrings;
+        m_state.details.clear();
+        changed();
         return;
     }
     if (score.notes.size() > m_capacity) {

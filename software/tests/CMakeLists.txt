@@ -32,7 +32,7 @@ add_test(NAME transfer_session COMMAND transfer_tests)
 if(GUITAR_BUILD_APP)
     add_executable(presentation_tests presentation_tests.cpp)
     target_link_libraries(presentation_tests PRIVATE
-        guitar_desktop Qt6::Quick Qt6::QuickControls2)
+        guitar_desktop guitar_firmware Qt6::Quick Qt6::QuickControls2)
     target_compile_definitions(presentation_tests PRIVATE
         GUITAR_QML_FILE="${PROJECT_SOURCE_DIR}/desktop/qml/Main.qml"
         GUITAR_CATALOG_FILE="${PROJECT_SOURCE_DIR}/desktop/data/songs.json")

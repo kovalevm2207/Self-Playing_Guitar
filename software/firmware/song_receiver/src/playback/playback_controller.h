@@ -29,6 +29,7 @@ public:
     PlaybackPhase phase() const { return m_phase; }
     uint16_t noteIndex() const { return m_index; }
     const char* error() const { return m_error; }
+    uint8_t supportedStringMask() const { return m_planner.config().stringMask; }
 
 private:
     bool prepare(uint32_t scheduledStart);
