@@ -9,6 +9,12 @@ target_include_directories(receiver_tests PRIVATE stubs)
 guitar_configure_target(receiver_tests)
 add_test(NAME firmware_parser COMMAND receiver_tests)
 
+add_executable(solenoid_test_tests solenoid_test_tests.cpp)
+target_include_directories(solenoid_test_tests PRIVATE stubs solenoid_stubs)
+target_compile_definitions(solenoid_test_tests PRIVATE ARDUINO_AVR_UNO F_CPU=16000000UL)
+guitar_configure_target(solenoid_test_tests)
+add_test(NAME solenoid_bench COMMAND solenoid_test_tests)
+
 add_executable(playback_tests playback_tests.cpp)
 target_link_libraries(playback_tests PRIVATE guitar_firmware)
 guitar_configure_target(playback_tests)

@@ -8,10 +8,15 @@ using __FlashStringHelper = char;
 #define HIGH 1
 #define OUTPUT 1
 inline unsigned gpioWrites = 0;
-inline void digitalWrite(uint8_t, uint8_t) {
+inline uint8_t gpioLevels[32]{};
+inline uint8_t gpioModes[32]{};
+inline void digitalWrite(uint8_t pin, uint8_t level) {
     ++gpioWrites;
+    gpioLevels[pin] = level;
 }
-inline void pinMode(uint8_t, uint8_t) {}
+inline void pinMode(uint8_t pin, uint8_t mode) {
+    gpioModes[pin] = mode;
+}
 struct MockSerial {
     std::string input, output;
     void begin(int) {}

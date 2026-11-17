@@ -15,6 +15,7 @@ def source_files():
         ROOT / "shared",
         ROOT / "tests",
         ROOT / "firmware/song_receiver/src",
+        ROOT / "bench/solenoid/src",
     ]
     for directory in directories:
         for path in sorted(directory.rglob("*")):
