@@ -224,7 +224,7 @@ void checkPresentation() {
     transferView.connectPort("TEST");
     assert(transferView.busy());
     transport.ready();
-    transport.receive("READY 1 96 DRYRUN\n");
+    transport.receive("READY 1 96 SIMULATED\n");
     assert(transferView.connected() && !transferView.busy());
     assert(QMetaObject::invokeMethod(
         &transferView, "upload", Q_ARG(QString, "twinkle"), Q_ARG(int, 90)));
@@ -239,6 +239,27 @@ void checkPresentation() {
     assert(transferView.progress() == 1 && !transferView.busy());
     assert(!transferView.loadedTitle().isEmpty());
     assert(stateChanges > 0);
+    auto* play = window->findChild<QObject*>("playScore");
+    auto* stop = window->findChild<QObject*>("stopPlayback");
+    assert(play && stop);
+    assert(play->property("enabled").toBool());
+    assert(QMetaObject::invokeMethod(play, "clicked"));
+    assert(transport.sent.back() == "PLAY\n");
+    transport.receive("OK PLAY\n");
+    QCoreApplication::processEvents();
+    assert(transferView.playing() && transferView.busy());
+    assert(stop->property("visible").toBool());
+    assert(!play->property("enabled").toBool());
+    assert(transferView.status().contains("Симуляция"));
+    assert(QMetaObject::invokeMethod(stop, "clicked"));
+    assert(transport.sent.back() == "STOP\n");
+    transport.receive("OK STOP\n");
+    QCoreApplication::processEvents();
+    assert(!transferView.playing() && transferView.canPlay());
+    transferView.play();
+    transport.receive("OK PLAY\nEVENT DONE\n");
+    assert(transferView.canPlay());
+    assert(transferView.status().contains("завершена"));
 
     for (const auto& warning : warnings) {
         std::cerr << warning.toStdString() << '\n';

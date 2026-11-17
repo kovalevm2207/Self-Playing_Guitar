@@ -42,6 +42,11 @@ TransferSession::TransferSession(DeviceTransport& transport)
 
 TransferSession::~TransferSession() {
     m_transport.setEvents({});
+    if (m_state.phase == TransferPhase::Starting ||
+        m_state.phase == TransferPhase::Playing ||
+        m_state.phase == TransferPhase::Stopping) {
+        m_transport.write("STOP\n");
+    }
     m_transport.close();
 }
 
@@ -65,9 +70,15 @@ void TransferSession::reset() {
     m_score = {};
     m_nextNote = 0;
     m_capacity = 0;
+    m_disconnectAfterStop = false;
 }
 
 void TransferSession::connectPort(const std::string& port) {
+    if (m_state.phase == TransferPhase::Starting ||
+        m_state.phase == TransferPhase::Playing ||
+        m_state.phase == TransferPhase::Stopping) {
+        return; // Finish STOP on the current board before replacing the connection.
+    }
     reset();
     if (port.empty()) {
         fail(TransferError::PortRequired);
@@ -83,6 +94,13 @@ void TransferSession::connectPort(const std::string& port) {
 }
 
 void TransferSession::disconnect() {
+    if (m_state.phase == TransferPhase::Starting ||
+        m_state.phase == TransferPhase::Playing ||
+        m_state.phase == TransferPhase::Stopping) {
+        m_disconnectAfterStop = true;
+        stop();
+        return;
+    }
     reset();
     changed();
 }
@@ -125,15 +143,47 @@ void TransferSession::receive(std::string bytes) {
 void TransferSession::handle(const std::string& line) {
     if (line == "BOOT 1") {
         if (m_state.phase == TransferPhase::Ready ||
-            m_state.phase == TransferPhase::Uploading) {
+            m_state.phase == TransferPhase::Uploading ||
+            m_state.phase == TransferPhase::Starting ||
+            m_state.phase == TransferPhase::Playing ||
+            m_state.phase == TransferPhase::Stopping) {
             fail(TransferError::Protocol, "Board restarted");
         }
+        return;
+    }
+    if (line == "EVENT DONE" || line == "EVENT FAULT TIMING") {
+        if (m_state.phase == TransferPhase::Playing) {
+            m_state.phase = TransferPhase::Ready;
+            m_state.result =
+                line == "EVENT DONE" ? TransferResult::Played : TransferResult::None;
+            m_state.error =
+                line == "EVENT DONE" ? TransferError::None : TransferError::Playback;
+            m_state.details = line == "EVENT DONE" ? "" : "TIMING";
+            changed();
+        }
+        return;
+    }
+    // STOP may overtake the acknowledgement of a preceding PLAY.
+    if (m_state.phase == TransferPhase::Stopping && line == "OK PLAY") {
+        return;
+    }
+    if (m_state.phase == TransferPhase::Stopping &&
+        (line == "ERR PLAN" || line == "ERR NOT_LOADED")) {
         return;
     }
     if (m_expected.empty()) {
         return;
     }
     if (line.rfind("ERR ", 0) == 0) {
+        if (m_state.phase == TransferPhase::Starting) {
+            m_transport.stopTimeout();
+            m_expected.clear();
+            m_state.phase = TransferPhase::Ready;
+            m_state.error = TransferError::Playback;
+            m_state.details = line.substr(4);
+            changed();
+            return;
+        }
         fail(TransferError::DeviceRejected, line.substr(4));
         return;
     }
@@ -146,13 +196,15 @@ void TransferSession::handle(const std::string& line) {
         int capacity = 0;
         if (!(response >> marker >> version >> capacity >> mode) ||
             response >> extra || marker != "READY" || version != "1" ||
-            mode != "DRYRUN" || capacity < 1) {
+            (mode != "DRYRUN" && mode != "SIMULATED") || capacity < 1) {
             fail(TransferError::Protocol);
             return;
         }
         m_transport.stopTimeout();
         m_expected.clear();
         m_capacity = std::min<size_t>(capacity, MaxNotes);
+        m_state.supportsPlayback = mode == "SIMULATED";
+        m_state.simulated = mode == "SIMULATED";
         m_state.phase = TransferPhase::Ready;
         changed();
         return;
@@ -164,6 +216,21 @@ void TransferSession::handle(const std::string& line) {
     }
     m_transport.stopTimeout();
     const auto acknowledged = std::exchange(m_expected, {});
+    if (acknowledged == "OK PLAY") {
+        m_state.phase = TransferPhase::Playing;
+        changed();
+        return;
+    }
+    if (acknowledged == "OK STOP") {
+        if (m_disconnectAfterStop) {
+            reset();
+        } else {
+            m_state.phase = TransferPhase::Ready;
+            m_state.result = TransferResult::Stopped;
+        }
+        changed();
+        return;
+    }
     if (acknowledged == "OK END") {
         m_state.phase = TransferPhase::Ready;
         m_state.result = TransferResult::Loaded;
@@ -214,8 +281,12 @@ void TransferSession::upload(PreparedScore score) {
         checksum = addNote(checksum, note);
     }
 
-    m_state = {};
     m_state.phase = TransferPhase::Uploading;
+    m_state.result = TransferResult::None;
+    m_state.error = TransferError::None;
+    m_state.details.clear();
+    m_state.loadedTitle.clear();
+    m_state.progress = 0;
     send("BEGIN " + std::to_string(m_score.notes.size()) + ' ' +
              std::to_string(checksum),
          "OK BEGIN");
@@ -234,12 +305,40 @@ void TransferSession::next() {
 }
 
 void TransferSession::cancel() {
+    if (m_state.phase == TransferPhase::Starting ||
+        m_state.phase == TransferPhase::Playing) {
+        stop();
+        return;
+    }
     if (m_state.phase != TransferPhase::Uploading &&
         m_state.phase != TransferPhase::Connecting) {
         return;
     }
     reset();
     m_state.result = TransferResult::Cancelled;
+    changed();
+}
+
+void TransferSession::play() {
+    if (m_state.phase != TransferPhase::Ready || !m_state.supportsPlayback ||
+        m_state.loadedTitle.empty()) {
+        return;
+    }
+    m_state.phase = TransferPhase::Starting;
+    m_state.result = TransferResult::None;
+    m_state.error = TransferError::None;
+    m_state.details.clear();
+    send("PLAY", "OK PLAY");
+    changed();
+}
+
+void TransferSession::stop() {
+    if (m_state.phase != TransferPhase::Starting &&
+        m_state.phase != TransferPhase::Playing) {
+        return;
+    }
+    m_state.phase = TransferPhase::Stopping;
+    send("STOP", "OK STOP");
     changed();
 }
 

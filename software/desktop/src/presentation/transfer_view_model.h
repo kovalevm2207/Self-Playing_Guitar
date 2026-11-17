@@ -13,6 +13,8 @@ class TransferViewModel : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY stateChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY stateChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
+    Q_PROPERTY(bool playing READ playing NOTIFY stateChanged)
+    Q_PROPERTY(bool canPlay READ canPlay NOTIFY stateChanged)
     Q_PROPERTY(double progress READ progress NOTIFY stateChanged)
     Q_PROPERTY(QString loadedTitle READ loadedTitle NOTIFY stateChanged)
 
@@ -25,6 +27,8 @@ public:
     QString status() const;
     bool connected() const;
     bool busy() const;
+    bool playing() const;
+    bool canPlay() const;
     double progress() const { return m_session.state().progress; }
     QString loadedTitle() const;
 
@@ -33,6 +37,8 @@ public:
     Q_INVOKABLE void disconnectPort();
     Q_INVOKABLE void upload(const QString& arrangementId, int tempo);
     Q_INVOKABLE void cancel();
+    Q_INVOKABLE void play();
+    Q_INVOKABLE void stop();
 
 signals:
     void portsChanged();

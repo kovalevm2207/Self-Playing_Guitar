@@ -34,6 +34,7 @@
           pkgs.ninja
           pkgs.git
           pkgs.python3
+          pkgs.platformio-core
           llvm.clang-tools
           nixGL.packages.${system}.nixGLIntel
         ] ++ qualityTools;

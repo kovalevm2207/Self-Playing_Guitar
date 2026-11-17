@@ -20,6 +20,7 @@ void connect(test::FakeTransport& transport, TransferSession& session,
     transport.receive("DY 1 " + std::to_string(capacity) + " DRYRUN\r\n");
     assert(session.state().phase == TransferPhase::Ready);
     assert(transport.timeoutMs == 0);
+    assert(!session.state().supportsPlayback);
 }
 
 PreparedScore sampleScore() {

@@ -4,10 +4,20 @@ guitar_configure_target(score_tests)
 add_test(NAME score_protocol COMMAND score_tests)
 
 add_executable(receiver_tests receiver_tests.cpp)
-target_link_libraries(receiver_tests PRIVATE guitar_protocol)
+target_link_libraries(receiver_tests PRIVATE guitar_firmware)
 target_include_directories(receiver_tests PRIVATE stubs)
 guitar_configure_target(receiver_tests)
 add_test(NAME firmware_parser COMMAND receiver_tests)
+
+add_executable(playback_tests playback_tests.cpp)
+target_link_libraries(playback_tests PRIVATE guitar_firmware)
+guitar_configure_target(playback_tests)
+add_test(NAME firmware_playback COMMAND playback_tests)
+
+add_executable(playback_integration_tests playback_integration_tests.cpp)
+target_link_libraries(playback_integration_tests PRIVATE guitar_firmware guitar_core)
+guitar_configure_target(playback_integration_tests)
+add_test(NAME playback_integration COMMAND playback_integration_tests)
 
 add_executable(catalog_tests catalog_tests.cpp)
 target_link_libraries(catalog_tests PRIVATE guitar_core)

@@ -15,13 +15,24 @@ TransferViewModel::~TransferViewModel() {
 }
 
 bool TransferViewModel::connected() const {
-    return m_session.state().phase == TransferPhase::Ready ||
-           m_session.state().phase == TransferPhase::Uploading;
+    return m_session.state().phase != TransferPhase::Disconnected &&
+           m_session.state().phase != TransferPhase::Connecting;
 }
 
 bool TransferViewModel::busy() const {
-    return m_session.state().phase == TransferPhase::Connecting ||
-           m_session.state().phase == TransferPhase::Uploading;
+    return m_session.state().phase != TransferPhase::Disconnected &&
+           m_session.state().phase != TransferPhase::Ready;
+}
+
+bool TransferViewModel::playing() const {
+    const auto phase = m_session.state().phase;
+    return phase == TransferPhase::Starting || phase == TransferPhase::Playing ||
+           phase == TransferPhase::Stopping;
+}
+
+bool TransferViewModel::canPlay() const {
+    return m_session.state().phase == TransferPhase::Ready &&
+           m_session.state().supportsPlayback && !loadedTitle().isEmpty();
 }
 
 QString TransferViewModel::loadedTitle() const {
@@ -46,6 +57,14 @@ QString TransferViewModel::status() const {
             return "В аранжировке больше нот, чем вмещает текущая прошивка Uno";
         case TransferError::InvalidScore:
             return "Не удалось подготовить ноты. Проверьте аранжировку и темп.";
+        case TransferError::Playback:
+            if (state.details == "PLAN") {
+                return "Переходы между нотами не укладываются в заданный темп";
+            }
+            if (state.details == "NOT_LOADED") {
+                return "Сначала загрузите ноты на контроллер";
+            }
+            return "Симуляция остановлена: контроллер пропустил срок действия";
         case TransferError::None:
             break;
     }
@@ -53,7 +72,15 @@ QString TransferViewModel::status() const {
         return "Загрузка отменена. Подключитесь снова.";
     }
     if (state.result == TransferResult::Loaded) {
-        return "Ноты загружены в RAM Uno · воспроизведение ещё не реализовано";
+        return state.simulated
+                   ? "Загружено: " + loadedTitle() + " · симуляция"
+                   : "Ноты загружены · прошивка поддерживает только приём";
+    }
+    if (state.result == TransferResult::Played) {
+        return "Симуляция исполнения завершена";
+    }
+    if (state.result == TransferResult::Stopped) {
+        return "Исполнение остановлено";
     }
     switch (state.phase) {
         case TransferPhase::Connecting:
@@ -61,7 +88,14 @@ QString TransferViewModel::status() const {
         case TransferPhase::Uploading:
             return "Передаём ноты на Uno…";
         case TransferPhase::Ready:
-            return "Uno подключена · приём нот без движения";
+            return state.simulated ? "Uno подключена · симуляция приводов"
+                                   : "Uno подключена · приём нот без движения";
+        case TransferPhase::Starting:
+            return "Запускаем симуляцию…";
+        case TransferPhase::Playing:
+            return "Симуляция исполнения · физические выходы отключены";
+        case TransferPhase::Stopping:
+            return "Останавливаем исполнение…";
         case TransferPhase::Disconnected:
             return "Подключите Arduino Uno по USB";
     }
@@ -90,6 +124,14 @@ void TransferViewModel::upload(const QString& arrangementId, int tempo) {
 
 void TransferViewModel::cancel() {
     m_session.cancel();
+}
+
+void TransferViewModel::play() {
+    m_session.play();
+}
+
+void TransferViewModel::stop() {
+    m_session.stop();
 }
 
 } // namespace guitar

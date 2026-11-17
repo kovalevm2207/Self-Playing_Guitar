@@ -25,6 +25,7 @@ function(guitar_configure_target target)
 endfunction()
 
 add_subdirectory(core)
+add_subdirectory(firmware/song_receiver)
 
 if(GUITAR_BUILD_APP)
     find_package(Qt6 6.8 CONFIG REQUIRED COMPONENTS Quick QuickControls2 SerialPort)

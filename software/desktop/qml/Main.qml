@@ -521,21 +521,41 @@ ApplicationWindow {
                             value: transfer.progress
                             visible: transfer.busy || transfer.progress > 0
                         }
-                        Action {
-                            text: transfer.busy ? "Передаём…" : "↓  Загрузить на Uno"
-                            primary: true
+                        RowLayout {
                             Layout.fillWidth: true
-                            enabled: transfer.connected && !transfer.busy && root.current !== null
-                            onClicked: transfer.upload(catalog.selectedArrangementId, Math.round(tempo.value))
+                            visible: !transfer.playing
+                            spacing: 8
+                            Action {
+                                text: transfer.busy ? "Передаём…" : "↓ Загрузить"
+                                primary: !transfer.canPlay
+                                Layout.fillWidth: true
+                                enabled: transfer.connected && !transfer.busy && root.current !== null
+                                onClicked: transfer.upload(catalog.selectedArrangementId, Math.round(tempo.value))
+                            }
+                            Action {
+                                objectName: "playScore"
+                                text: "▶ Исполнить"
+                                primary: transfer.canPlay
+                                Layout.fillWidth: true
+                                enabled: transfer.canPlay
+                                onClicked: transfer.play()
+                            }
+                        }
+                        Action {
+                            objectName: "stopPlayback"
+                            text: "■  Остановить"
+                            visible: transfer.playing
+                            Layout.fillWidth: true
+                            onClicked: transfer.stop()
                         }
                         Action {
                             text: "Отменить"
-                            visible: transfer.busy
+                            visible: transfer.busy && !transfer.playing
                             Layout.fillWidth: true
                             onClicked: transfer.cancel()
                         }
                         Txt {
-                            text: "Версия 0.1 передаёт ноты в память платы. Управление механикой и воспроизведение будут следующим этапом."
+                            text: "Исполнение работает в симуляции приводов. Реальное движение потребует калибровки устройства."
                             color: "#879186"
                             wrapMode: Text.WordWrap
                             font.pixelSize: 10

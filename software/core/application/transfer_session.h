@@ -8,8 +8,16 @@
 
 namespace guitar {
 
-enum class TransferPhase { Disconnected, Connecting, Ready, Uploading };
-enum class TransferResult { None, Loaded, Cancelled };
+enum class TransferPhase {
+    Disconnected,
+    Connecting,
+    Ready,
+    Uploading,
+    Starting,
+    Playing,
+    Stopping
+};
+enum class TransferResult { None, Loaded, Cancelled, Played, Stopped };
 enum class TransferError {
     None,
     PortRequired,
@@ -18,7 +26,8 @@ enum class TransferError {
     Protocol,
     DeviceRejected,
     Capacity,
-    InvalidScore
+    InvalidScore,
+    Playback
 };
 
 struct TransferState {
@@ -28,6 +37,8 @@ struct TransferState {
     std::string details;
     std::string loadedTitle;
     double progress = 0;
+    bool supportsPlayback = false;
+    bool simulated = false;
 };
 
 class TransferSession {
@@ -43,6 +54,8 @@ public:
     void disconnect();
     void upload(PreparedScore score);
     void cancel();
+    void play();
+    void stop();
     void reportInvalidScore(const std::string& details);
 
 private:
@@ -63,6 +76,7 @@ private:
     size_t m_nextNote = 0;
     size_t m_capacity = 0;
     uint64_t m_generation = 0;
+    bool m_disconnectAfterStop = false;
 };
 
 } // namespace guitar
