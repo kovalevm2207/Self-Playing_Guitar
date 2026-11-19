@@ -1,10 +1,7 @@
 """Exercise manual controls and the handshake without opening a serial port."""
 
-from pathlib import Path
-import sys
 import tkinter as tk
 
-sys.path.append(str(Path.home() / ".platformio/penv/Lib/site-packages"))
 from control import Control
 
 
